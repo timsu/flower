@@ -2,19 +2,23 @@ require "rubygems"
 require "bundler/setup"
 require 'typhoeus'
 require 'json'
+require 'rufus/scheduler'
 
 class Flower
-  require File.expand_path(File.join(File.dirname(__FILE__), 'session'))
-  require File.expand_path(File.join(File.dirname(__FILE__), 'command'))
-  require File.expand_path(File.join(File.dirname(__FILE__), 'config'))
-
-  COMMANDS = {} # We are going to load available commands in here
-
-  Dir.glob("lib/commands/**/*.rb").each do |file|
-    require File.expand_path(File.join(File.dirname(__FILE__), "..", file))
+  ["session", "command", "job", "config"].each do |file|
+    require File.expand_path(File.join(File.dirname(__FILE__), file))
   end
 
-  attr_accessor :messages_url, :post_url, :flow_url, :session, :users
+  COMMANDS = {} # We are going to load available commands in here
+  JOBS = []
+
+  ["commands", "jobs"].each do |type|
+    Dir.glob("lib/#{type}/**/*.rb").each do |file|
+      require File.expand_path(File.join(File.dirname(__FILE__), "..", file))
+    end
+  end
+
+  attr_accessor :messages_url, :post_url, :flow_url, :session, :users, :scheduler
 
   def initialize
     self.messages_url = base_url + "/flows/#{Flower::Config.flow}/apps/chat/messages"
@@ -22,6 +26,7 @@ class Flower
     self.flow_url     = base_url + "/flows/#{Flower::Config.flow}.json"
     self.session      = Session.new()
     self.users        = {}
+    self.scheduler    = Rufus::Scheduler::PlainScheduler.start_new
   end
 
   def say(message, options = {})
@@ -37,12 +42,19 @@ class Flower
   def boot!
     session.login
     get_users!
+    start_jobs!
     monitor!
   end
-
+  
   private
   def base_url
     "https://#{Flower::Config.company.downcase}.flowdock.com"
+  end
+
+  def start_jobs!
+    JOBS.each do |job|
+      job.schedule(self, scheduler)
+    end
   end
 
   def monitor!

@@ -7,6 +7,7 @@ class Flower::Schedulable
   end
 end
 
+# see http://rufus.rubyforge.org/rufus-scheduler/
 class Flower::Job
 
   def self.every(time, &block)
